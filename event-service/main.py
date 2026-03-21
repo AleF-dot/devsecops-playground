@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import datetime
 import requests
 import os
+import hmac
 
 KEY = os.environ.get("EVENT_API_KEY")
 ALERT_API_KEY = os.environ.get("ALERT_API_KEY")
@@ -21,7 +22,7 @@ def health():
 
 @app.post("/event")
 def event_handler(event: Event, x_api_key: str = Header(...)):
-    if x_api_key == KEY:
+    if hmac.compare_digest(x_api_key, KEY):
         events.append({
             "type": event.type,
             "user": event.user,
@@ -33,7 +34,6 @@ def event_handler(event: Event, x_api_key: str = Header(...)):
                 json={
                     "type": event.type,
                     "user": event.user,
-                    "time": datetime.datetime.now().replace(microsecond=0).isoformat()
                 },
                 headers={"X-Api-Key": ALERT_API_KEY}
             )
@@ -43,7 +43,7 @@ def event_handler(event: Event, x_api_key: str = Header(...)):
 
 @app.get("/events")
 def return_events(x_api_key: str = Header(...)):
-    if x_api_key == KEY:
+    if hmac.compare_digest(x_api_key, KEY):
         return {"success": True, "events": events}
     else:
         raise HTTPException(status_code=401, detail="invalid API key")

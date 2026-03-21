@@ -1,25 +1,27 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from db import get_connection, init_db
 import datetime
 import secrets
 import requests
 import os
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 EVENT_API_KEY = os.environ.get("EVENT_API_KEY")
 
-users = {
-"admin": "secret"
-}
-
-users_states = {
-    "admin": "active"
-}
-
-sessions = {}
-
-attempts = {}
+conn = get_connection()
+if conn is not None:
+            init_db(conn)
+else:
+    raise Exception("Database connection missing")
 
 class LoginRequest(BaseModel):
     user: str
@@ -30,8 +32,9 @@ def health():
     return {"status": "ok", "service": "auth", "time": datetime.datetime.now().replace(microsecond=0).isoformat()}
 
 @app.post("/login")
-def login(request: LoginRequest):
-    user = request.user
+@limiter.limit("5/minute")
+def login(request: Request, body: LoginRequest):
+    user = body.user
     
     if not users.get(user):
         return {"success": False, "reason": "not found"}
@@ -44,7 +47,7 @@ def login(request: LoginRequest):
         )
         return {"success": False, "reason": "blocked"}
 
-    if users.get(user) == request.password:
+    if users.get(user) == body.password:
         token = secrets.token_hex(nbytes=15)
         sessions[token] = user
         requests.post(
