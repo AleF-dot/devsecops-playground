@@ -12,14 +12,14 @@ Tres servicios independientes comunicados por HTTP via push:
 [Cliente] → auth-service → event-service → alert-service
 ```
 
-- **auth-service** (8000) — login, tokens, bloqueo por intentos fallidos
+- **auth-service** (8000) — login, tokens, bloqueo por intentos fallidos, tres tablas en postgres:15
 - **event-service** (8001) — registro de eventos con timestamp
 - **alert-service** (8002) — detección de patrones, alerta ante 3 fallos en 60 segundos
 
 ## Stack
 
 - Python 3.11 + FastAPI
-- Docker + docker-compose
+- Docker + docker-compose + postgres:15
 - Autenticación entre servicios via API key en header `X-Api-Key`
 
 ## Correr el sistema
