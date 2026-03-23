@@ -26,7 +26,7 @@ def init_db(conn):
     create_users_table = '''
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
-            username VARCHAR(15) NOT NULL,
+            username VARCHAR(15) NOT NULL UNIQUE,
             password  VARCHAR(15) NOT NULL,
             status VARCHAR NOT NULL
         )
@@ -35,7 +35,7 @@ def init_db(conn):
     create_sessions_table = '''
         CREATE TABLE IF NOT EXISTS sessions (
             id SERIAL PRIMARY KEY,
-            token VARCHAR(30) NOT NULL,
+            token VARCHAR(30) NOT NULL UNIQUE,
             username  VARCHAR(15) NOT NULL,
             creation_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -44,7 +44,7 @@ def init_db(conn):
     create_attempts_table = '''
         CREATE TABLE IF NOT EXISTS attempts (
             id SERIAL PRIMARY KEY,
-            username  VARCHAR(15) NOT NULL,
+            username  VARCHAR(15) NOT NULL UNIQUE,
             attempts INTEGER
         )
         '''
@@ -52,6 +52,8 @@ def init_db(conn):
     cur.execute(create_users_table)
     cur.execute(create_sessions_table)
     cur.execute(create_attempts_table)
+    
+    cur.execute("INSERT INTO users (username, password, status) VALUES ('admin', 'secret', 'active') ON CONFLICT (username) DO NOTHING")
 
     conn.commit()    
     cur.close()

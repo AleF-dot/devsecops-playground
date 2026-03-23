@@ -36,10 +36,16 @@ def health():
 def login(request: Request, body: LoginRequest):
     user = body.user
     
-    if not users.get(user):
+    with conn.cursor() as cur:
+        cur.execute("SELECT password, status FROM users WHERE username = %s", (user,))
+        user_row = cur.fetchone()
+        cur.execute("SELECT attempts FROM attempts WHERE username = %s", (user,))
+        attempts_row = cur.fetchone()
+    
+    if not user_row:
         return {"success": False, "reason": "not found"}
     
-    if users_states.get(user) == "blocked":
+    if user_row[1] == "blocked":
         requests.post(
             "http://event-service:8001/event",
             json={"type": "login_blocked", "user": user},
@@ -47,9 +53,11 @@ def login(request: Request, body: LoginRequest):
         )
         return {"success": False, "reason": "blocked"}
 
-    if users.get(user) == body.password:
+    if user_row[0] == body.password:
         token = secrets.token_hex(nbytes=15)
-        sessions[token] = user
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO sessions (token, username) VALUES (%s, %s)", (token, user,))
+        conn.commit()
         requests.post(
             "http://event-service:8001/event",
             json={"type": "login_succeeded", "user": user},
@@ -57,9 +65,14 @@ def login(request: Request, body: LoginRequest):
         )
         return {"success": True, "token" : token}
     else:
-        attempts[user] = attempts.get(user, 0) + 1
-        if attempts[user] == 3:
-            users_states[user] = "blocked"
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO attempts (username, attempts) VALUES (%s, 1) ON CONFLICT (username) DO UPDATE SET attempts = attempts.attempts + 1",
+                (user,)
+            )
+            if attempts_row and attempts_row[0] == 2:
+                cur.execute("UPDATE users SET status = 'blocked' WHERE username = %s", (user,))
+        conn.commit()
         requests.post(
             "http://event-service:8001/event",
             json={"type": "login_failed", "user": user},
@@ -70,7 +83,12 @@ def login(request: Request, body: LoginRequest):
 
 @app.get("/validate")
 def validate_token(token: str):
-    if sessions.get(token):
-        return {"success": True, "user": sessions[token]}
+    
+    with conn.cursor() as cur:
+        cur.execute("SELECT username FROM sessions WHERE token = %s", (token,))
+        session_row = cur.fetchone()
+    
+    if session_row:
+        return {"success": True, "user": session_row[0]}
     else:
         return {"success": False, "reason": "invalid token"}
